@@ -2,17 +2,14 @@ import requests
 import json
 from datetime import date
 
-import os
-from dotenv import load_dotenv
+from airflow.decorators import task
+from airflow.models import Variable
 
-load_dotenv(dotenv_path="./.env")
+API_KEY = Variable.get("API_KEY")
+CHANNEL_HANDLE = Variable.get("CHANNEL_HANDLE")
+MAX_RESULTS = int(Variable.get("MAX_RESULTS"))
 
-API_KEY = os.getenv("API_KEY")
-
-CHANNEL_HANDLE = os.getenv("CHANNEL_HANDLE")
-
-maxResults = 50
-
+@task
 def get_playlist_id():
 
     try:
@@ -38,13 +35,13 @@ def get_playlist_id():
     except requests.exceptions.RequestException as e:
         raise e
     
-
-def get_video_ids(playlistId, maxResults):
+@task
+def get_video_ids(playlistId):
 
     video_ids = []
     pageToken = None
 
-    base_url = f"https://youtube.googleapis.com/youtube/v3/playlistItems?part=contentDetails&maxResults={maxResults}&playlistId={playlistId}&key={API_KEY}"
+    base_url = f"https://youtube.googleapis.com/youtube/v3/playlistItems?part=contentDetails&maxResults={MAX_RESULTS}&playlistId={playlistId}&key={API_KEY}"
 
     try:
         while True:
@@ -73,8 +70,8 @@ def get_video_ids(playlistId, maxResults):
     except requests.exceptions.RequestException as e:
         raise e
 
-
-def extract_video_data(video_ids, maxResults):
+@task
+def extract_video_data(video_ids):
     extracted_data = []
 
     def batch_list(video_id_list, batch_size):
@@ -83,7 +80,7 @@ def extract_video_data(video_ids, maxResults):
 
 
     try:
-        for batch in batch_list(video_ids, maxResults):
+        for batch in batch_list(video_ids, MAX_RESULTS):
             video_ids_str = ",".join(batch)
 
             url = f"https://youtube.googleapis.com/youtube/v3/videos?part=contentDetails&part=snippet&part=statistics&id={video_ids_str}&key={API_KEY}"
@@ -118,6 +115,7 @@ def extract_video_data(video_ids, maxResults):
     except requests.exceptions.RequestException as e:
         raise e
 
+@task
 def save_to_json(extracted_data):
     file_path = f"./data/Youtube_data_{date.today()}.json"
 
@@ -126,8 +124,8 @@ def save_to_json(extracted_data):
 
 if __name__ == "__main__":
     playlistId = get_playlist_id()
-    video_ids = get_video_ids(playlistId, maxResults)
-    video_data = extract_video_data(video_ids, maxResults)
+    video_ids = get_video_ids(playlistId)
+    video_data = extract_video_data(video_ids)
     save_to_json(video_data)
 
 
